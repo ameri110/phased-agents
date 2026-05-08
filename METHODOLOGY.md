@@ -56,9 +56,9 @@ One sub-phase = one commit. Commit after the eval PASSes, before the doc-keeper 
 
 The most common failure mode of this methodology: agents skip the commit step. The template's `CLAUDE.md` codifies it; `.claude/settings.json` allows the routine git commands without permission prompts. If you find yourself with 40+ uncommitted files, something is broken — see "Recovery" below.
 
-### 5. The main session co-manages
+### 5. The project-lead is its own role
 
-There's a sixth role no subagent can fill: **the main session as project lead**. This is the Claude session you (the human) drive directly. It:
+There's a sixth role no subagent can fill: the **project-lead**. This is the Claude session you (the human) drive directly in the project root. It:
 
 - Reads sub-session reports
 - Surfaces decisions that need user input
@@ -66,7 +66,12 @@ There's a sixth role no subagent can fill: **the main session as project lead**.
 - Catches process drift (uncommitted work, doc-bloat, dropped balls)
 - Holds the long-term context the user couldn't be expected to remember
 
-You don't define this role with a markdown file — it's just how you use Claude Code in the project's root directory. The main session reads `CLAUDE.md` like everyone else, but it also reads the user's strategic intent and helps shape what comes next.
+The project-lead is not invoked via the `.claude/agents/` system; it's the default conversation in the project root. But because it's a *role* — with its own contract for what it should and shouldn't do — the template ships two files that make it durable:
+
+- **`PROJECT-LEAD.md`** — describes the contract: what the project-lead does, what it doesn't, how it interacts with sub-sessions
+- **`RESUME-LEAD.md`** — a prompt you paste into a fresh Claude Code session to spawn a new project-lead. The new session reads `PROJECT-LEAD.md`, the durable state (`CLAUDE.md`, git log, recent eval/review reports), gives you a briefing, and hands you the floor
+
+This matters because Claude Code sessions die — closed, crashed, context-limited. Without `RESUME-LEAD.md`, every replacement project-lead would have to rediscover its role from scratch. With it, you lose nothing: you open Claude, paste the prompt, get a briefing, continue.
 
 ## The five subagents in detail
 

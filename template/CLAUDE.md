@@ -67,6 +67,16 @@ scripts/           # runnable entry points (training, evals, ...)
 {{EVAL_COMMANDS}}
 ```
 
+## The project-lead role
+
+The Claude session in this project's root is the **project-lead** — see
+`PROJECT-LEAD.md`. It's not a subagent; it's the conversational layer
+that holds the project together across sub-sessions.
+
+If your project-lead session ends (closed, crashed, hit context limits),
+spawn a new one by opening Claude Code in this directory and pasting the
+contents of `RESUME-LEAD.md`.
+
 ## Working with subagents
 
 Five specialized agents live in `.claude/agents/`:

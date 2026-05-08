@@ -100,6 +100,17 @@ The `BOOTSTRAP.md` for adoption asks Claude to *audit your existing repo first* 
 
 The body of each (what they audit for, what tools they use) is generic in this template. Day-1 customization tunes them to your domain — the `reviewer` for an algorithms project hunts for sign errors, the `reviewer` for an API project hunts for authn/authz leaks.
 
+## The sixth role: project-lead
+
+Above the five subagents sits a sixth role: the **project-lead**. It's the Claude session you (the human) drive directly in the project root. It reads sub-session reports, surfaces decisions, drafts kickoff prompts for the next pipeline, and catches process drift. It does *not* write code, run evals, or audit — those are the subagents' jobs.
+
+Because it lives in your conversation rather than in a `.claude/agents/` file, it needs a way to respawn when your session ends. The template ships two files for that:
+
+- `PROJECT-LEAD.md` — describes the role
+- `RESUME-LEAD.md` — the prompt you paste into a fresh Claude Code session to bring up a new project-lead from the durable state (`CLAUDE.md` + git log + recent reports)
+
+Open Claude in your project root, paste `RESUME-LEAD.md`, get a briefing, continue where you left off. No context is lost because the durable state lives in files.
+
 ## Read more
 
 - **[METHODOLOGY.md](./METHODOLOGY.md)** — the philosophy, why each rule exists, anti-patterns, customization guide

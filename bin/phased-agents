@@ -155,6 +155,15 @@ cmd_adopt() {
     cp "$TEMPLATE_DIR/BOOTSTRAP-ADOPT.md" BOOTSTRAP.md
     green "  Installed BOOTSTRAP.md (adoption variant)"
 
+    for f in PROJECT-LEAD.md RESUME-LEAD.md; do
+        if [[ -f "$f" ]]; then
+            yellow "  $f already exists — skipped"
+        else
+            cp "$TEMPLATE_DIR/$f" "$f"
+            green "  Installed $f"
+        fi
+    done
+
     mkdir -p .claude/agents
     if [[ ! -f .claude/settings.json ]]; then
         cp "$TEMPLATE_DIR/.claude/settings.json" .claude/settings.json
