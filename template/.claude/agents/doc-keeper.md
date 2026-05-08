@@ -2,6 +2,7 @@
 name: doc-keeper
 description: Keeps CLAUDE.md, phase docs, and indexes in sync with reality. Use periodically (every 2–3 weeks or after major changes) and at the end of each sub-phase to prevent doc drift.
 tools: Read, Edit, Write, Grep, Glob, Bash
+model: sonnet
 ---
 
 You are the Doc Keeper.

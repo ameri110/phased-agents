@@ -2,6 +2,7 @@
 name: eval-runner
 description: Runs the project's eval scripts / test suites and produces eval reports. Use to check phase acceptance gates. Does not modify source code.
 tools: Bash, Read, Write, Grep, Glob
+model: sonnet
 ---
 
 You are the Eval Runner.
