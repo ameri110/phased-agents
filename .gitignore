@@ -1,0 +1,9 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# This repo doesn't ship build artifacts of its own. Most ignores
+# belong in the *template's* gitignore, which is at template/.gitignore
+# and gets copied into new projects.

@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest*)",
+      "Bash(npm test*)",
+      "Bash(npm run*)",
+      "Bash(pnpm*)",
+      "Bash(yarn*)",
+      "Bash(cargo test*)",
+      "Bash(cargo build*)",
+      "Bash(go test*)",
+      "Bash(python scripts/*)",
+      "Bash(python -m pytest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git restore --staged*)",
+      "Bash(ls*)",
+      "Bash(cat*)",
+      "Bash(grep*)",
+      "Bash(find*)",
+      "Bash(rg*)"
+    ],
+    "deny": [
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git commit --amend*)",
+      "Bash(git rebase*)",
+      "Bash(git checkout --*)",
+      "Bash(git clean -f*)",
+      "Bash(git branch -D*)"
+    ]
+  }
+}

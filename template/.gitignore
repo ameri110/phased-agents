@@ -1,0 +1,46 @@
+# Generic starter — extend per stack during day-1 BOOTSTRAP.
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+.nuxt/
+dist/
+build/
+coverage/
+.turbo/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Caches / training artifacts (add per-project as needed)
+cache/
+training_runs/
+checkpoints/
+*.pkl
+*.npz
+*.npy

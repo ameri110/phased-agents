@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# phased-agents — methodology toolkit for long-running AI-driven projects
+#
+# Entry points:
+#   phased-agents install            install agent definitions to ~/.claude/agents/
+#   phased-agents new <path>         create a new project from the template
+#   phased-agents adopt              add the method to the current project
+#   phased-agents help               show this help
+
+set -euo pipefail
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+TEMPLATE_DIR="$REPO_ROOT/template"
+
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow(){ printf '\033[33m%s\033[0m\n' "$*"; }
+bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
+
+usage() {
+    cat <<'EOF'
+phased-agents — methodology toolkit for long-running AI-driven projects
+
+Usage: phased-agents <command> [args]
+
+Commands:
+  install [--force]     Install agent definitions globally to ~/.claude/agents/.
+                        Skips files that already exist unless --force.
+                        Project-scoped agents (in <project>/.claude/agents/)
+                        always override globals when present.
+
+  new <path>            Create a new project at <path> from the template.
+                        Initializes git. Tells you how to start day-1 setup.
+
+  adopt                 Add the method to the current directory (existing project).
+                        Backs up any existing CLAUDE.md to CLAUDE.md.bak.
+                        Adds .claude/agents/ and docs/ skeleton (only files
+                        that don't already exist).
+
+  help                  Show this help.
+
+Examples:
+  phased-agents install
+  phased-agents new ~/Desktop/projects/my-thing
+  cd ~/my-existing-project && phased-agents adopt
+EOF
+}
+
+require_template() {
+    if [[ ! -d "$TEMPLATE_DIR" ]]; then
+        red "Error: template directory not found at $TEMPLATE_DIR" >&2
+        exit 1
+    fi
+}
+
+cmd_install() {
+    require_template
+    local force=false
+    if [[ "${1:-}" == "--force" ]]; then force=true; fi
+
+    local target="$HOME/.claude/agents"
+    mkdir -p "$target"
+    bold "Installing agents to $target"
+    echo
+
+    local installed=0 skipped=0
+    for f in "$TEMPLATE_DIR/.claude/agents/"*.md; do
+        local name dest
+        name=$(basename "$f")
+        dest="$target/$name"
+        if [[ -f "$dest" && "$force" != true ]]; then
+            yellow "  $name: already exists — skipping (use --force to overwrite)"
+            ((skipped++))
+        else
+            cp "$f" "$dest"
+            green "  $name: installed"
+            ((installed++))
+        fi
+    done
+
+    echo
+    echo "Installed: $installed   Skipped: $skipped"
+    echo
+    echo "These are global; project-scoped agents in <project>/.claude/agents/"
+    echo "override them when present. Customize the global ones for your default"
+    echo "domain, or copy them per-project for domain-specific tuning."
+}
+
+cmd_new() {
+    require_template
+    if [[ $# -lt 1 ]]; then
+        red "Error: 'new' requires a target path" >&2
+        echo "Usage: phased-agents new <path>" >&2
+        exit 1
+    fi
+
+    local target="$1"
+    if [[ -e "$target" ]]; then
+        red "Error: $target already exists." >&2
+        exit 1
+    fi
+
+    bold "Creating project at $target"
+    mkdir -p "$target"
+    # cp -R template/. preserves dotfiles and avoids the macOS BSD cp quirk
+    cp -R "$TEMPLATE_DIR/." "$target/"
+    # The adopt-flavour bootstrap is only relevant when retrofitting an
+    # existing repo. Strip it from new-project targets so they ship clean.
+    rm -f "$target/BOOTSTRAP-ADOPT.md"
+
+    (
+        cd "$target"
+        git init -q
+        # Stage the initial template so first commit is clean. Don't commit
+        # automatically — let the user / Claude do that after BOOTSTRAP.
+        git add -A
+    )
+
+    echo
+    green "Done. Next steps:"
+    echo
+    echo "  cd $target"
+    echo "  claude"
+    echo
+    echo "Then paste the contents of BOOTSTRAP.md when Claude opens. It walks"
+    echo "Claude through interviewing you about your project (domain, stack, eval"
+    echo "semantics, timeline) and customizing the template before any code."
+    echo
+    echo "After Claude finishes the day-1 setup, run:"
+    echo "  git commit -m 'chore: scaffold from phased-agents template'"
+}
+
+cmd_adopt() {
+    require_template
+    if [[ ! -d ".git" ]]; then
+        red "Error: not in a git repository." >&2
+        echo "Run 'git init' first, or cd into an existing repo." >&2
+        exit 1
+    fi
+
+    bold "Adopting phased-agents method in $(pwd)"
+    echo
+
+    local backed_up=false
+    if [[ -f "CLAUDE.md" ]]; then
+        cp CLAUDE.md CLAUDE.md.bak
+        backed_up=true
+        yellow "  Existing CLAUDE.md backed up to CLAUDE.md.bak"
+    fi
+
+    cp "$TEMPLATE_DIR/CLAUDE.md" CLAUDE.md
+    green "  Installed CLAUDE.md (template version)"
+
+    cp "$TEMPLATE_DIR/BOOTSTRAP-ADOPT.md" BOOTSTRAP.md
+    green "  Installed BOOTSTRAP.md (adoption variant)"
+
+    mkdir -p .claude/agents
+    if [[ ! -f .claude/settings.json ]]; then
+        cp "$TEMPLATE_DIR/.claude/settings.json" .claude/settings.json
+        green "  Installed .claude/settings.json"
+    else
+        yellow "  .claude/settings.json already exists — skipped"
+    fi
+
+    for f in "$TEMPLATE_DIR/.claude/agents/"*.md; do
+        local name dest
+        name=$(basename "$f")
+        dest=".claude/agents/$name"
+        if [[ -f "$dest" ]]; then
+            yellow "  .claude/agents/$name already exists — skipped"
+        else
+            cp "$f" "$dest"
+            green "  Installed .claude/agents/$name"
+        fi
+    done
+
+    for sub in phases decisions research evals reviews; do
+        mkdir -p "docs/$sub"
+        local readme="docs/$sub/README.md"
+        local src="$TEMPLATE_DIR/docs/$sub/README.md"
+        if [[ ! -f "$readme" && -f "$src" ]]; then
+            cp "$src" "$readme"
+            green "  Installed docs/$sub/README.md"
+        fi
+    done
+
+    for tmpl in "docs/phases/_phase-template.md" "docs/decisions/_adr-template.md"; do
+        if [[ ! -f "$tmpl" && -f "$TEMPLATE_DIR/$tmpl" ]]; then
+            cp "$TEMPLATE_DIR/$tmpl" "$tmpl"
+            green "  Installed $tmpl"
+        fi
+    done
+
+    echo
+    if $backed_up; then
+        yellow "Your previous CLAUDE.md is at CLAUDE.md.bak — you'll merge it during BOOTSTRAP."
+    fi
+    echo
+    green "Next: open Claude Code in this directory and paste BOOTSTRAP.md."
+    echo "It walks Claude through auditing your existing repo and proposing a phase plan"
+    echo "that picks up where you are, rather than starting from zero."
+}
+
+case "${1:-help}" in
+    install) shift; cmd_install "$@" ;;
+    new)     shift; cmd_new "$@" ;;
+    adopt)   shift; cmd_adopt "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+        red "Unknown command: ${1:-}" >&2
+        echo >&2
+        usage >&2
+        exit 1
+        ;;
+esac
