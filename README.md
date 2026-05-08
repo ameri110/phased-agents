@@ -111,9 +111,29 @@ Because it lives in your conversation rather than in a `.claude/agents/` file, i
 
 Open Claude in your project root, paste `RESUME-LEAD.md`, get a briefing, continue where you left off. No context is lost because the durable state lives in files.
 
+## Want to keep phased-agents files out of your project repo entirely?
+
+For multi-developer projects where you don't want to impose AI tooling
+on teammates, or solo projects where you just want your AI workflow
+private, there's a fourth entry point: **personal mode** (Mode C). Files
+live in a personal vault (a separate git repo, ~/.phased-agents/, you
+push to a private remote) and the project gets symlinks pointing into
+the vault. Entries in `.git/info/exclude` hide the symlinks from git.
+Teammates see zero footprint.
+
+```bash
+phased-agents personal init                    # one-time, set up the vault
+cd ~/Desktop/projects/poker
+phased-agents personal link                    # migrate this project to Mode C
+# (interactive — confirms before moving any existing files into the vault)
+```
+
+See **[PERSONAL-MODE.md](./PERSONAL-MODE.md)** for the full guide.
+
 ## Read more
 
 - **[METHODOLOGY.md](./METHODOLOGY.md)** — the philosophy, why each rule exists, anti-patterns, customization guide
+- **[PERSONAL-MODE.md](./PERSONAL-MODE.md)** — Mode C: keep phased-agents files out of the project repo entirely
 - **[template/](./template/)** — the actual files copied into your project
 - **[bin/phased-agents](./bin/phased-agents)** — the entry-point script
 

@@ -5,6 +5,7 @@
 #   phased-agents install            install agent definitions to ~/.claude/agents/
 #   phased-agents new <path>         create a new project from the template
 #   phased-agents adopt              add the method to the current project
+#   phased-agents personal <sub>     Mode C — files-out-of-repo via personal vault
 #   phased-agents help               show this help
 
 set -euo pipefail
@@ -12,6 +13,14 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 TEMPLATE_DIR="$REPO_ROOT/template"
+
+VAULT_DIR="${PHASED_AGENTS_VAULT:-$HOME/.phased-agents}"
+EXCLUDE_MARKER_START="# >>> phased-agents personal mode (managed)"
+EXCLUDE_MARKER_END="# <<< phased-agents personal mode"
+
+# Paths under a project that get vaulted in personal mode.
+PERSONAL_FILES=(CLAUDE.md PROJECT-LEAD.md RESUME-LEAD.md)
+PERSONAL_DIRS=(.claude docs/phases docs/decisions docs/research docs/evals docs/reviews)
 
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -38,12 +47,20 @@ Commands:
                         Adds .claude/agents/ and docs/ skeleton (only files
                         that don't already exist).
 
+  personal <sub>        Mode C: phased-agents files live in a personal vault
+                        (default ~/.phased-agents) and the project gets
+                        symlinks. Project repo never sees a phased-agents
+                        file (entries added to .git/info/exclude).
+                        Subcommands: init, link, relink, status, commit.
+                        Run 'phased-agents personal help' for details.
+
   help                  Show this help.
 
 Examples:
   phased-agents install
   phased-agents new ~/Desktop/projects/my-thing
   cd ~/my-existing-project && phased-agents adopt
+  phased-agents personal init && cd <project> && phased-agents personal link
 EOF
 }
 
@@ -211,10 +228,562 @@ cmd_adopt() {
     echo "that picks up where you are, rather than starting from zero."
 }
 
+# ---------------------------------------------------------------------------
+# Mode C — personal vault commands
+# ---------------------------------------------------------------------------
+
+personal_usage() {
+    cat <<'EOF'
+phased-agents personal — Mode C (fully personal, files-out-of-repo)
+
+Files normally committed to your project repo (CLAUDE.md, .claude/, docs/
+phases/, docs/decisions/, docs/research/, docs/evals/, docs/reviews/) live
+instead in a personal vault. The project gets symlinks pointing at the
+vault. Entries in .git/info/exclude hide the symlinks from git, so
+teammates see zero phased-agents footprint.
+
+Subcommands:
+  init                  Initialize the vault (default ~/.phased-agents).
+                        Idempotent — refuses if a non-empty vault exists.
+
+  link                  Set up Mode C in the current project (or
+                        --project <path>). If existing phased-agents files
+                        are present in the project, they are MIGRATED
+                        (moved to the vault, git rm in the project,
+                        replaced with symlinks). Otherwise, fresh templates
+                        are copied into the vault. Adds entries to
+                        .git/info/exclude. Optional: --name <name>.
+
+  relink <name>         Recreate symlinks for a vaulted project. Use after
+                        a fresh clone of the vault on a new machine, or
+                        after a project moves on disk. Optional: --project
+                        <path> to update the recorded path.
+
+  status                Show vault git status, remote, and the list of
+                        linked projects with link health.
+
+  commit [-m msg]       Convenience: commit pending changes in the vault.
+                        Default message is 'chore: vault sync'. User pushes
+                        manually with 'git push' from the vault directory.
+
+  help                  Show this help.
+
+Environment:
+  PHASED_AGENTS_VAULT   Override the vault path (default: ~/.phased-agents).
+
+Examples:
+  phased-agents personal init
+  cd ~/Desktop/projects/poker && phased-agents personal link
+  phased-agents personal status
+  phased-agents personal commit -m "phase-2c-i: doc-keeper sync"
+  phased-agents personal relink poker --project /new/path
+
+Migrating an existing Mode-A project to Mode C:
+  cd ~/Desktop/projects/poker
+  phased-agents personal link    # interactive — confirms before moving
+  # then in the project repo:
+  git status                      # review the staged deletions
+  git commit -m 'chore: switch to phased-agents personal mode (Mode C)'
+  # and push the vault for backup:
+  cd ~/.phased-agents
+  git remote add origin <your-private-remote>  # one-time
+  git push -u origin main
+EOF
+}
+
+require_python3() {
+    if ! command -v python3 >/dev/null 2>&1; then
+        red "Error: python3 not found (used for projects.json bookkeeping)." >&2
+        exit 1
+    fi
+}
+
+require_vault() {
+    if [[ ! -d "$VAULT_DIR/.git" ]]; then
+        red "Error: vault not initialized at $VAULT_DIR" >&2
+        echo "Run 'phased-agents personal init' first." >&2
+        exit 1
+    fi
+}
+
+# Update projects.json: $1=name, $2=project_path
+update_projects_json() {
+    require_python3
+    local name="$1" path="$2"
+    python3 - "$VAULT_DIR/projects.json" "$name" "$path" <<'PY'
+import json, sys, datetime
+path_json, name, project_path = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path_json) as f:
+        d = json.load(f)
+except Exception:
+    d = {}
+d[name] = {"project_path": project_path, "linked_at": datetime.date.today().isoformat()}
+with open(path_json, "w") as f:
+    json.dump(d, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
+}
+
+# Read project_path for $1 from projects.json (empty if not found)
+read_project_path() {
+    require_python3
+    python3 - "$VAULT_DIR/projects.json" "$1" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(d.get(sys.argv[2], {}).get("project_path", ""))
+except Exception:
+    pass
+PY
+}
+
+cmd_personal_init() {
+    require_template
+    if [[ -e "$VAULT_DIR" && "$(ls -A "$VAULT_DIR" 2>/dev/null)" ]]; then
+        red "Vault already exists and is non-empty: $VAULT_DIR" >&2
+        echo "(set PHASED_AGENTS_VAULT to a different path to use a separate vault)" >&2
+        exit 1
+    fi
+
+    bold "Initializing personal vault at $VAULT_DIR"
+    mkdir -p "$VAULT_DIR/projects"
+
+    cat > "$VAULT_DIR/README.md" <<EOF
+# phased-agents personal vault
+
+Personal vault for Mode C ("fully personal") usage of the phased-agents
+methodology. Each linked project gets a subdirectory under \`projects/\`
+holding the CLAUDE.md, .claude/, and docs/ that would otherwise live in
+the project repo itself. The actual project repos contain symlinks
+pointing into here, with .git/info/exclude entries that hide them from
+git. Teammates see zero phased-agents footprint in your project repos.
+
+## Backing this up
+
+This vault is a git repo. Push it to a private remote:
+
+    cd $VAULT_DIR
+    git remote add origin <your-private-remote-url>
+    git push -u origin main
+
+## On a new machine
+
+    git clone <your-private-remote-url> ~/.phased-agents
+    phased-agents personal relink <project-name> [--project <path>]
+
+\`relink\` recreates the symlinks on the new machine. If the project's
+on-disk path differs, pass --project.
+
+## Commit discipline in Mode C
+
+A sub-phase produces commits in two repos:
+
+- **Project repo:** code changes (per the methodology's commit discipline)
+- **This vault:** CLAUDE.md / phase docs / ADRs / eval reports / reviews
+
+\`phased-agents personal commit\` is a convenience for the vault commit.
+EOF
+
+    echo "{}" > "$VAULT_DIR/projects.json"
+    cat > "$VAULT_DIR/.gitignore" <<'EOF'
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+EOF
+
+    (
+        cd "$VAULT_DIR"
+        git init -q
+        git add -A
+        git commit -q -m "chore: initialize phased-agents personal vault"
+    )
+
+    green "Initialized $VAULT_DIR"
+    echo
+    echo "Next steps:"
+    echo "  1. Add a remote and push for backup:"
+    echo "       cd $VAULT_DIR"
+    echo "       git remote add origin git@github.com:<you>/phased-agents-vault.git"
+    echo "       git push -u origin main"
+    echo
+    echo "  2. Link your first project:"
+    echo "       cd /path/to/project"
+    echo "       phased-agents personal link"
+}
+
+# Helper: write the .git/info/exclude block in $1 (project path).
+# No-op if the marker is already present.
+write_exclude_block() {
+    local project_path="$1"
+    local exclude_file="$project_path/.git/info/exclude"
+    mkdir -p "$(dirname "$exclude_file")"
+    touch "$exclude_file"
+    if grep -qF "$EXCLUDE_MARKER_START" "$exclude_file"; then
+        return 0
+    fi
+    {
+        echo
+        echo "$EXCLUDE_MARKER_START"
+        for f in "${PERSONAL_FILES[@]}"; do echo "/$f"; done
+        for d in "${PERSONAL_DIRS[@]}"; do echo "/$d"; done
+        echo "$EXCLUDE_MARKER_END"
+    } >> "$exclude_file"
+}
+
+cmd_personal_link() {
+    require_template
+    require_vault
+
+    local project_path="$(pwd)" project_name="" force=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project) project_path="$(cd "$2" && pwd)"; shift 2 ;;
+            --name)    project_name="$2"; shift 2 ;;
+            --force)   force=1; shift ;;
+            -h|--help) personal_usage; exit 0 ;;
+            *) red "Unknown option: $1" >&2; exit 1 ;;
+        esac
+    done
+
+    if [[ ! -d "$project_path/.git" ]]; then
+        red "Not a git repository: $project_path" >&2
+        exit 1
+    fi
+
+    project_name="${project_name:-$(basename "$project_path")}"
+    local vault_proj="$VAULT_DIR/projects/$project_name"
+
+    if [[ -d "$vault_proj" && "$force" -ne 1 ]]; then
+        red "Vault entry already exists: $vault_proj" >&2
+        echo "(use --force to overwrite, or pick a different --name)" >&2
+        exit 1
+    fi
+
+    bold "Linking '$project_name' (Mode C)"
+    echo "  Project: $project_path"
+    echo "  Vault:   $vault_proj"
+    echo
+
+    # Detect existing phased-agents files in the project that would be migrated.
+    local migrating=()
+    for f in "${PERSONAL_FILES[@]}"; do
+        if [[ -e "$project_path/$f" && ! -L "$project_path/$f" ]]; then
+            migrating+=("$f")
+        fi
+    done
+    for d in "${PERSONAL_DIRS[@]}"; do
+        if [[ -e "$project_path/$d" && ! -L "$project_path/$d" ]]; then
+            migrating+=("$d")
+        fi
+    done
+
+    if [[ ${#migrating[@]} -gt 0 ]]; then
+        yellow "Found existing phased-agents content in the project:"
+        for m in "${migrating[@]}"; do echo "    $m"; done
+        echo
+        echo "These will be MOVED into the vault and replaced with symlinks."
+        echo "Their removal will be staged in the project repo (you commit)."
+        echo "If teammates are using these files, this hides them from the project."
+        echo
+        printf "Proceed? [y/N] "
+        read -r answer
+        if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+            yellow "Aborted."
+            exit 1
+        fi
+    fi
+
+    # Create vault skeleton
+    mkdir -p "$vault_proj/.claude/agents"
+    mkdir -p "$vault_proj/docs"/{phases,decisions,research,evals,reviews}
+
+    # Top-level files: migrate or template-copy
+    for f in "${PERSONAL_FILES[@]}"; do
+        if [[ -f "$project_path/$f" && ! -L "$project_path/$f" ]]; then
+            mv "$project_path/$f" "$vault_proj/$f"
+            green "  migrated $f → vault"
+        elif [[ -f "$TEMPLATE_DIR/$f" ]]; then
+            cp "$TEMPLATE_DIR/$f" "$vault_proj/$f"
+            green "  templated $f → vault"
+        fi
+    done
+
+    # .claude (whole dir)
+    if [[ -d "$project_path/.claude" && ! -L "$project_path/.claude" ]]; then
+        cp -R "$project_path/.claude/." "$vault_proj/.claude/"
+        rm -rf "$project_path/.claude"
+        green "  migrated .claude/ → vault"
+    else
+        cp "$TEMPLATE_DIR/.claude/settings.json" "$vault_proj/.claude/settings.json" 2>/dev/null || true
+        for af in "$TEMPLATE_DIR/.claude/agents/"*.md; do
+            [[ -f "$af" ]] && cp "$af" "$vault_proj/.claude/agents/"
+        done
+        green "  templated .claude/ → vault"
+    fi
+
+    # docs/ subdirs
+    for sub in phases decisions research evals reviews; do
+        if [[ -d "$project_path/docs/$sub" && ! -L "$project_path/docs/$sub" ]]; then
+            cp -R "$project_path/docs/$sub/." "$vault_proj/docs/$sub/"
+            rm -rf "$project_path/docs/$sub"
+            green "  migrated docs/$sub/ → vault"
+        else
+            for tmplf in README.md _phase-template.md _adr-template.md; do
+                if [[ -f "$TEMPLATE_DIR/docs/$sub/$tmplf" ]]; then
+                    cp "$TEMPLATE_DIR/docs/$sub/$tmplf" "$vault_proj/docs/$sub/" 2>/dev/null || true
+                fi
+            done
+            green "  templated docs/$sub/ → vault"
+        fi
+    done
+
+    # Stage the deletions in the project repo (so the user's next commit removes them from team's view)
+    if [[ ${#migrating[@]} -gt 0 ]]; then
+        echo
+        bold "Staging deletions in project repo:"
+        (
+            cd "$project_path"
+            for m in "${migrating[@]}"; do
+                git rm -rf --quiet --ignore-unmatch "$m" 2>/dev/null || true
+                echo "  git rm -rf $m"
+            done
+        )
+    fi
+
+    # Create symlinks in the project pointing into the vault
+    echo
+    bold "Creating symlinks in $project_path:"
+    for f in "${PERSONAL_FILES[@]}"; do
+        ln -s "$vault_proj/$f" "$project_path/$f"
+        green "  $f → $vault_proj/$f"
+    done
+    ln -s "$vault_proj/.claude" "$project_path/.claude"
+    green "  .claude/ → $vault_proj/.claude"
+    mkdir -p "$project_path/docs"
+    for sub in phases decisions research evals reviews; do
+        ln -s "$vault_proj/docs/$sub" "$project_path/docs/$sub"
+        green "  docs/$sub/ → $vault_proj/docs/$sub"
+    done
+
+    # .git/info/exclude
+    write_exclude_block "$project_path"
+    green "  Updated $project_path/.git/info/exclude"
+
+    # Bookkeeping
+    update_projects_json "$project_name" "$project_path"
+
+    # Commit the vault
+    (
+        cd "$VAULT_DIR"
+        git add -A
+        git commit -q -m "feat: link project '$project_name'
+
+project_path: $project_path"
+    )
+
+    echo
+    green "Done. '$project_name' is now in Mode C."
+    echo
+    if [[ ${#migrating[@]} -gt 0 ]]; then
+        echo "Next steps:"
+        echo "  1. Commit the deletions in your project repo:"
+        echo "       cd $project_path"
+        echo "       git status   # review the rm's"
+        echo "       git commit -m 'chore: switch to phased-agents personal mode (Mode C)'"
+        echo
+        echo "  2. (One-time) push the vault for backup:"
+        echo "       cd $VAULT_DIR"
+        echo "       git remote add origin <your-private-remote>"
+        echo "       git push -u origin main"
+    else
+        echo "Next: commit and push the vault when ready:"
+        echo "  cd $VAULT_DIR && git push"
+    fi
+}
+
+cmd_personal_relink() {
+    require_template
+    require_vault
+
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        red "Usage: phased-agents personal relink <name> [--project <path>]" >&2
+        exit 1
+    fi
+    shift
+
+    local project_path=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project) project_path="$(cd "$2" && pwd)"; shift 2 ;;
+            -h|--help) personal_usage; exit 0 ;;
+            *) red "Unknown option: $1" >&2; exit 1 ;;
+        esac
+    done
+
+    local vault_proj="$VAULT_DIR/projects/$name"
+    if [[ ! -d "$vault_proj" ]]; then
+        red "No vault entry for '$name' at $vault_proj" >&2
+        exit 1
+    fi
+
+    if [[ -z "$project_path" ]]; then
+        project_path="$(read_project_path "$name")"
+    fi
+    if [[ -z "$project_path" ]]; then
+        red "Project path unknown for '$name'. Pass --project <path>." >&2
+        exit 1
+    fi
+    if [[ ! -d "$project_path/.git" ]]; then
+        red "Not a git repository: $project_path" >&2
+        exit 1
+    fi
+
+    bold "Relinking '$name' → $project_path"
+
+    for f in "${PERSONAL_FILES[@]}"; do
+        if [[ -L "$project_path/$f" ]]; then
+            rm "$project_path/$f"
+        elif [[ -e "$project_path/$f" ]]; then
+            yellow "  $f exists as a real file in project — not overwriting"
+            continue
+        fi
+        ln -s "$vault_proj/$f" "$project_path/$f"
+        green "  $f → $vault_proj/$f"
+    done
+
+    if [[ -L "$project_path/.claude" ]]; then
+        rm "$project_path/.claude"
+    elif [[ -e "$project_path/.claude" ]]; then
+        yellow "  .claude exists as a real dir — not overwriting"
+    fi
+    if [[ ! -e "$project_path/.claude" ]]; then
+        ln -s "$vault_proj/.claude" "$project_path/.claude"
+        green "  .claude/ → $vault_proj/.claude"
+    fi
+
+    mkdir -p "$project_path/docs"
+    for sub in phases decisions research evals reviews; do
+        if [[ -L "$project_path/docs/$sub" ]]; then
+            rm "$project_path/docs/$sub"
+        elif [[ -e "$project_path/docs/$sub" ]]; then
+            yellow "  docs/$sub exists as a real dir — not overwriting"
+            continue
+        fi
+        ln -s "$vault_proj/docs/$sub" "$project_path/docs/$sub"
+        green "  docs/$sub/ → $vault_proj/docs/$sub"
+    done
+
+    write_exclude_block "$project_path"
+    update_projects_json "$name" "$project_path"
+
+    echo
+    green "Done."
+}
+
+cmd_personal_status() {
+    if [[ ! -d "$VAULT_DIR/.git" ]]; then
+        red "Vault not initialized at $VAULT_DIR" >&2
+        echo "Run 'phased-agents personal init' first." >&2
+        exit 1
+    fi
+
+    bold "Vault: $VAULT_DIR"
+
+    local dirty
+    dirty=$(cd "$VAULT_DIR" && git status --porcelain | wc -l | tr -d ' ')
+    if [[ "$dirty" == "0" ]]; then
+        green "  Working tree clean."
+    else
+        yellow "  $dirty uncommitted change(s) — run 'phased-agents personal commit'"
+    fi
+
+    local remote
+    remote=$(cd "$VAULT_DIR" && git remote get-url origin 2>/dev/null || echo "")
+    if [[ -z "$remote" ]]; then
+        yellow "  Remote: (none — set one for backup)"
+    else
+        echo "  Remote: $remote"
+    fi
+    echo
+
+    bold "Linked projects:"
+    require_python3
+    python3 - "$VAULT_DIR/projects.json" <<'PY'
+import json, os, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+except Exception:
+    d = {}
+if not d:
+    print("  (none yet — run 'phased-agents personal link' in a project)")
+else:
+    name_w = max(len(n) for n in d) + 2
+    for name in sorted(d):
+        info = d[name]
+        p = info.get("project_path", "")
+        ok_repo  = os.path.isdir(os.path.join(p, ".git"))
+        ok_link  = os.path.islink(os.path.join(p, "CLAUDE.md"))
+        if ok_repo and ok_link:
+            status = "OK"
+        elif ok_repo and not ok_link:
+            status = "BROKEN-LINKS (run relink)"
+        else:
+            status = "PROJECT-MISSING"
+        print(f"  {name:<{name_w}} {status:<28} {p}")
+PY
+}
+
+cmd_personal_commit() {
+    require_vault
+
+    local msg="chore: vault sync"
+    if [[ "${1:-}" == "-m" && -n "${2:-}" ]]; then
+        msg="$2"
+    fi
+
+    cd "$VAULT_DIR"
+    if [[ -z "$(git status --porcelain)" ]]; then
+        green "Vault is clean — nothing to commit."
+        return 0
+    fi
+
+    git status --short
+    git add -A
+    git commit -q -m "$msg"
+    green "Committed: $msg"
+    echo "Push when ready: cd $VAULT_DIR && git push"
+}
+
+cmd_personal() {
+    case "${1:-help}" in
+        init)    shift; cmd_personal_init "$@" ;;
+        link)    shift; cmd_personal_link "$@" ;;
+        relink)  shift; cmd_personal_relink "$@" ;;
+        status)  shift; cmd_personal_status "$@" ;;
+        commit)  shift; cmd_personal_commit "$@" ;;
+        help|-h|--help) personal_usage ;;
+        *)
+            red "Unknown personal subcommand: ${1:-}" >&2
+            echo >&2
+            personal_usage >&2
+            exit 1
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+
 case "${1:-help}" in
-    install) shift; cmd_install "$@" ;;
-    new)     shift; cmd_new "$@" ;;
-    adopt)   shift; cmd_adopt "$@" ;;
+    install)  shift; cmd_install "$@" ;;
+    new)      shift; cmd_new "$@" ;;
+    adopt)    shift; cmd_adopt "$@" ;;
+    personal) shift; cmd_personal "$@" ;;
     help|-h|--help) usage ;;
     *)
         red "Unknown command: ${1:-}" >&2
