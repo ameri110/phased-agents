@@ -50,4 +50,6 @@ Walk the repo and update documentation to match reality.
 
 A short summary of what you changed and why, plus any flags for the
 project lead. Commit your changes as a single doc-sync commit with
-subject `chore: doc-keeper sync — <what>`.
+subject `chore: doc-keeper sync — <what>`, on the current sub-phase
+branch — never directly on `main`. The project-lead merges it via the
+sub-phase's PR (see CLAUDE.md "Commit & PR discipline").

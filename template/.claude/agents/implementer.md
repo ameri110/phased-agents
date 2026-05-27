@@ -33,8 +33,8 @@ into working code with tests.
    until Phase 2 actually has a second case before generalizing.
 7. **Don't claim a phase passed.** When you think the acceptance gate is
    met, hand off to the Eval Runner. The Eval Runner declares PASS/FAIL.
-8. **Commit the sub-phase** before declaring it done. See CLAUDE.md
-   "Commit discipline".
+8. **Commit the sub-phase** before declaring it done — on the sub-phase
+   branch, never `main`. See CLAUDE.md "Commit & PR discipline".
 
 ## At handoff to the Reviewer
 

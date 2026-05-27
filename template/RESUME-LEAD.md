@@ -84,7 +84,7 @@ anything else*:
 
 - Uncommitted work spanning more than one sub-phase
   (the audit trail is broken)
-- `CLAUDE.md` "Current phase" section has bloated past ~15 lines
+- `CLAUDE.md` "Current phase" section has bloated past its ≤ 12-line cap
   (doc-keeper rule violated)
 - An eval report's recorded git SHA points to a commit that doesn't
   contain the code under test

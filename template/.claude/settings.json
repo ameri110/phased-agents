@@ -18,6 +18,9 @@
       "Bash(git add*)",
       "Bash(git commit*)",
       "Bash(git restore --staged*)",
+      "Bash(git push*)",
+      "Bash(git worktree*)",
+      "Bash(gh pr*)",
       "Bash(ls*)",
       "Bash(cat*)",
       "Bash(grep*)",
@@ -25,7 +28,9 @@
       "Bash(rg*)"
     ],
     "deny": [
-      "Bash(git push*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push*--force-with-lease*)",
       "Bash(git reset --hard*)",
       "Bash(git commit --amend*)",
       "Bash(git rebase*)",

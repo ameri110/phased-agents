@@ -101,7 +101,7 @@ Typical phase loop:
 2. `implementer` writes code + tests against that note
 3. `reviewer` audits the implementation against the note
 4. `eval-runner` runs the phase eval and reports PASS/FAIL
-5. **commit the sub-phase** (see "Commit discipline" below)
+5. **commit the sub-phase** (see "Commit & PR discipline" below)
 6. `doc-keeper` updates phase status and CLAUDE.md "current phase"
 
 ## Commit & PR discipline
@@ -155,6 +155,6 @@ git worktree remove ../{{PROJECT_SLUG}}--phase-2b   # after merge
 
 - **Don't trust intuition.** Re-derive specs and verify against sources.
 - **Run the eval before claiming a phase is done.** Always.
-- **Commit the sub-phase before declaring it done.** See "Commit discipline".
+- **Commit the sub-phase before declaring it done.** See "Commit & PR discipline".
 - **Update this file** when layout, conventions, or current phase changes.
   A stale CLAUDE.md is a project-killer.
