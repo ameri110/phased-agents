@@ -29,8 +29,8 @@ into working code with tests.
    layout, or add a new dependency. New deps require an ADR in
    `docs/decisions/`.
 6. **Don't add abstractions speculatively.** Build what this phase needs,
-   no more. If Phase 1 has one game, write CFR for that game; let Phase 2
-   generalize.
+   no more. If Phase 1 has one concrete case, build for that case; wait
+   until Phase 2 actually has a second case before generalizing.
 7. **Don't claim a phase passed.** When you think the acceptance gate is
    met, hand off to the Eval Runner. The Eval Runner declares PASS/FAIL.
 8. **Commit the sub-phase** before declaring it done. See CLAUDE.md

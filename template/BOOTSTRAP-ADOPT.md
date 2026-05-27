@@ -79,7 +79,8 @@ Show me:
 - The reverse-engineered phase plan
 - The ADRs you drafted
 - Your recommendation for the next sub-phase, with a copy-pasteable
-  kickoff prompt
+  kickoff prompt wrapped in a HANDOFF block (`role:` / `branch:` /
+  `phase-doc:` headers, per `PROJECT-LEAD.md`)
 
 Ask me to confirm or adjust. Iterate until I approve.
 

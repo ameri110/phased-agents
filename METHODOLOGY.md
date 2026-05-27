@@ -20,7 +20,7 @@ The methodology addresses each.
 
 A phase is a goal + a measurable acceptance gate + an exit criterion. The gate must be verifiable by a script that produces a PASS/FAIL report. "Reasonable" or "good enough" don't count.
 
-**Why:** Hard gates make verification cheap and force the project to confront problems early. A buggy CFR implementation looks identical to a working one until you measure exploitability — without the measurement, you'd ship the bug.
+**Why:** Hard gates make verification cheap and force the project to confront problems early. A subtly buggy algorithm looks identical to a correct one until you measure the quantity it's supposed to optimize — without the measurement, you'd ship the bug.
 
 Sub-phases are smaller phases. A phase with too much in it gets split into 1a, 1b, 1c, etc. Each has its own gate.
 
@@ -54,6 +54,8 @@ One sub-phase = one commit. Commit after the eval PASSes, before the doc-keeper 
 
 **Why:** The git log becomes the project's audit trail. `git log --oneline` should read like a project journal: which sub-phases happened, in what order, with what results. Eval reports embed git SHAs for reproducibility — which only works if the work was actually committed when the eval ran.
 
+**Only the project-lead commits to `main`.** Sub-sessions do their commit on a branch and open a PR; the project-lead is the integrator who merges. This is what makes parallel work safe: any number of pipelines can run at once on their own branches, and `main` stays a clean linear journal. When sub-phases are independent, each runs in its own git worktree + branch (the worktree is per *sub-phase*, shared by all five agents — not one per agent, or the researcher→implementer→reviewer handoff would need a merge to happen). Linear phase chains, where one gate depends on the previous, don't parallelize and run the normal single-session way.
+
 The most common failure mode of this methodology: agents skip the commit step. The template's `CLAUDE.md` codifies it; `.claude/settings.json` allows the routine git commands without permission prompts. If you find yourself with 40+ uncommitted files, something is broken — see "Recovery" below.
 
 ### 5. The project-lead is its own role
@@ -72,6 +74,8 @@ The project-lead is not invoked via the `.claude/agents/` system; it's the defau
 - **`RESUME-LEAD.md`** — a prompt you paste into a fresh Claude Code session to spawn a new project-lead. The new session reads `PROJECT-LEAD.md`, the durable state (`CLAUDE.md`, git log, recent eval/review reports), gives you a briefing, and hands you the floor
 
 This matters because Claude Code sessions die — closed, crashed, context-limited. Without `RESUME-LEAD.md`, every replacement project-lead would have to rediscover its role from scratch. With it, you lose nothing: you open Claude, paste the prompt, get a briefing, continue.
+
+**Supervised vs autonomous.** By default the project-lead is non-executing: it drafts kickoff prompts and you run the pipelines. It can also run *autonomous* — spawning pipelines as background subagents and shepherding them to PRs — if you opt in. This is compatible with principle 2 because each subagent runs in its own context window; only a summary returns to the lead, so the lead's context doesn't accumulate the drift that doing the work inline would cause. The hard boundary that does **not** move: the autonomous lead answers *mechanical* questions itself (which branch, where's the note) but escalates every *decision* (algorithm choice, gate calibration, anything ADR-worthy) to the human. Letting the lead decide those would remove the human gate and contaminate the reviewer's independence — the two things the methodology exists to protect.
 
 ## The five subagents in detail
 
@@ -143,15 +147,16 @@ The day-1 BOOTSTRAP fills the right list in based on your project's domain.
 A typical sub-phase session:
 
 1. User opens Claude in the project directory; `CLAUDE.md` loads automatically.
-2. User pastes a kickoff prompt (drafted by the main session): "Sub-phase Nx per `docs/phases/phase-N-...md`. Pre-decisions: ... Pipeline: researcher → implementer → reviewer → eval-runner. Commit per CLAUDE.md."
+2. User pastes a kickoff prompt (a HANDOFF block drafted by the project-lead, with `role:`, `branch:`, and `phase-doc:` headers — see `PROJECT-LEAD.md`). The sub-phase runs on its own branch (and worktree, if it's a parallel one).
 3. **Researcher** writes or updates `docs/research/<topic>.md`.
 4. **Implementer** writes code + tests against the note.
 5. **Reviewer** independently audits; files findings; possibly REJECTs and round-trips with implementer.
 6. **Eval-runner** runs the gate script and writes a PASS/FAIL report.
-7. The session commits the sub-phase as a single git commit.
+7. The session commits the sub-phase as a single commit on its branch and opens a PR.
 8. **Doc-keeper** updates `CLAUDE.md` "Current phase" and the phase doc's status.
+9. The **project-lead** reviews the PR, reconciles the ADR index, and merges to `main`.
 
-If any step fails (gate FAIL, reviewer REJECT, etc.), the session does not advance — the failure is real and gets fixed before the next sub-phase starts.
+If any step fails (gate FAIL, reviewer REJECT, etc.), the session does not advance — the failure is real and gets fixed before the PR merges.
 
 ## Anti-patterns
 
@@ -164,6 +169,9 @@ Things to actively avoid:
 - **Speculative abstraction** — building a generic interface for the second game when you have one game. Wait for the second game.
 - **CLAUDE.md bloat** — accumulating decades of changelog into the bible. The doc-keeper rule (≤ 12 lines for current phase) prevents this.
 - **Continuing on a failed gate** — "we'll fix it next sub-phase" never happens. Fix it now or recalibrate the gate transparently with an ADR.
+- **Sub-sessions pushing to `main`** — they open PRs; only the project-lead merges. A direct push from a parallel branch is how the audit trail forks.
+- **One worktree per agent** — the worktree is per sub-phase. Splitting the pipeline across worktrees forces a merge between researcher and implementer for no benefit.
+- **The autonomous lead deciding for you** — spawning pipelines is fine; answering an ADR-worthy question itself is not. That collapses the human gate.
 
 ## Recovery: when the methodology has slipped
 
@@ -178,7 +186,7 @@ Don't panic. Recovery is mechanical:
 
 1. **Stop forward progress.** Don't start the next sub-phase until recovery is done.
 2. **Diagnose with `git status`** and the agents' session reports.
-3. **Make catch-up commits**, one per missed sub-phase, in chronological order. Use commit messages that honestly describe what happened ("phase-1d: alternating CFR + MCCFR — landed during 2026-05-06 session, committed during 2026-05-08 recovery sweep"). Don't rewrite history.
+3. **Make catch-up commits**, one per missed sub-phase, in chronological order. Use commit messages that honestly describe what happened ("phase-1d: <what landed> — implemented during the earlier session, committed during the later recovery sweep"). Don't rewrite history.
 4. **Run a doc-keeper sweep** to bring `CLAUDE.md` back in line with reality.
 5. **File ADRs retroactively** for any major decisions that lack them.
 6. **Update the methodology rules** in `CLAUDE.md` to prevent recurrence (e.g., add the missing rule that caused the drift).

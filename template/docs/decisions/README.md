@@ -19,8 +19,15 @@ way it is.
 
 ## Format
 
-See `_adr-template.md`. Number sequentially: `0001-...md`, `0002-...md`,
-etc.
+See `_adr-template.md`. Name files `YYYY-MM-DD-<slug>.md` —
+e.g. `2026-05-27-postgres-vs-sqlite.md`.
+
+**Why date+slug, not sequential numbers.** When sub-phases run in
+parallel branches (see CLAUDE.md "Parallel pipelines"), two branches both
+grabbing `0007-...md` collide at merge, and renumbering breaks every
+inbound link. Date+slug filenames never collide and never need renaming.
+The index table below is the canonical ordering; the project-lead keeps it
+in sync when branches merge.
 
 ## Index
 

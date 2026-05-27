@@ -25,10 +25,10 @@ Acceptance gate: {{GATE}}. See `docs/phases/phase-0-{{PHASE_0_SLUG}}.md`.
 
 Long projects fail without (a) a written architecture, (b) hard acceptance
 gates per phase, and (c) brutal evaluation discipline. {{DOMAIN-SPECIFIC
-SILENCE-OF-BUGS NOTE — e.g., "CFR-family algorithms are silent when buggy",
-"auth/security bugs pass tests but leak in production", "UI a11y bugs are
-invisible until a screen reader user hits them"}}. Every change must pass its
-acceptance test before it counts as done.
+SILENCE-OF-BUGS NOTE — e.g., "numerical/algorithmic code is silent when
+buggy", "auth/security bugs pass tests but leak in production", "UI a11y
+bugs are invisible until a screen reader user hits them"}}. Every change
+must pass its acceptance test before it counts as done.
 
 ## Repo layout
 
@@ -77,6 +77,12 @@ If your project-lead session ends (closed, crashed, hit context limits),
 spawn a new one by opening Claude Code in this directory and pasting the
 contents of `RESUME-LEAD.md`.
 
+The project-lead runs **supervised** by default (drafts kickoff prompts;
+you open the sub-sessions). It can also run **autonomous** if you opt in —
+spawning pipelines as background subagents and answering agents' mechanical
+questions itself, while still escalating every design/spec/gate decision to
+you. See `PROJECT-LEAD.md`.
+
 ## Working with subagents
 
 Five specialized agents live in `.claude/agents/`:
@@ -98,7 +104,7 @@ Typical phase loop:
 5. **commit the sub-phase** (see "Commit discipline" below)
 6. `doc-keeper` updates phase status and CLAUDE.md "current phase"
 
-## Commit discipline
+## Commit & PR discipline
 
 **Every sub-phase ends with a single git commit before doc-keeper sign-off.**
 
@@ -113,6 +119,37 @@ Typical phase loop:
 - If a sub-phase ends and `git status` shows files outside that sub-phase's
   scope as modified, **stop and ask the project lead** — usually means a
   previous sub-phase wasn't committed.
+
+**Only the project-lead (or the user) commits to `main`.** Sub-sessions
+work on a branch and open a PR; they never push to `main` directly. The
+project-lead is the integrator: it reviews the PR's eval/review reports,
+resolves any ADR-index collisions, and merges. This keeps `main` an
+honest, linear audit trail no matter how many pipelines ran in parallel.
+
+## Parallel pipelines
+
+When sub-phases are **independent** (no gate dependency between them),
+run each in its own worktree + branch and land it as a PR. The unit of
+isolation is the **sub-phase**, not the individual agent — all five RIRED
+agents (researcher → implementer → reviewer → eval-runner → doc-keeper)
+share one worktree so they can see each other's notes, diffs, and reports.
+
+```bash
+# from the project root, for sub-phase 2b:
+git worktree add ../{{PROJECT_SLUG}}--phase-2b phase-2b-<slug>
+# ... run the full pipeline inside that worktree ...
+# commit per discipline above, push the branch, open a PR:
+git push -u origin phase-2b-<slug>
+gh pr create --fill
+git worktree remove ../{{PROJECT_SLUG}}--phase-2b   # after merge
+```
+
+- Use this only for work that genuinely fans out. A linear phase chain
+  (phase 2's gate depends on phase 1) does **not** parallelize — run it
+  the normal single-session way.
+- Each branch's ADRs use date+slug filenames so they never collide
+  (see `docs/decisions/README.md`).
+- The project-lead merges PRs into `main` and reconciles the ADR index.
 
 ## Critical reminders for any agent
 

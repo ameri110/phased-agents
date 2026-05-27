@@ -62,8 +62,9 @@ Based on my answers:
    real work. (Examples: "implement the simplest version of the core
    thing", "stand up the engine with a hello-world test", "deploy a
    single endpoint with auth and verify it works.")
-6. **Draft an initial `docs/decisions/0001-stack-and-conventions.md`**
-   ADR documenting the tech-stack decisions from question 3.
+6. **Draft an initial ADR** at `docs/decisions/<today>-stack-and-conventions.md`
+   (date+slug filename, e.g. `2026-05-27-stack-and-conventions.md`)
+   documenting the tech-stack decisions from question 3.
 
 ## Step 4: present and confirm
 
@@ -78,8 +79,10 @@ Once I confirm:
    `chore: scaffold from phased-agents template; customize for {{project}}`
 2. Tell me the prompt to use for the next session — the one that will
    start Phase 0's pipeline (researcher → implementer → reviewer →
-   eval-runner). Make it self-contained so I can paste it into a fresh
-   Claude session.
+   eval-runner). Wrap it in a HANDOFF block (`===== HANDOFF START =====`
+   … `===== HANDOFF END =====`) with `role:`, `branch:`, and `phase-doc:`
+   headers, per `PROJECT-LEAD.md`. Make it self-contained so I can paste
+   it into a fresh Claude session or route it to the agent via `/agents`.
 3. Stop. Don't write production code yet.
 
 ## Important rules during this bootstrap

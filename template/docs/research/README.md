@@ -16,5 +16,5 @@ for the required structure.
 
 ## Naming
 
-`<short-topic-name>.md`. Examples: `cfr.md`, `oauth-pkce.md`,
+`<short-topic-name>.md`. Examples: `consistent-hashing.md`, `oauth-pkce.md`,
 `webrtc-handshake.md`, `wcag-keyboard-nav.md`.

@@ -31,108 +31,46 @@ Overkill for one-week projects, throw-away prototypes, or "build me a marketing 
 
 ## Quick start
 
-### One-time, optional: install agents globally
+You don't run an installer or pick a "scenario." Open Claude Code in your project directory (or an empty directory for a brand-new project) and paste one prompt:
 
-If you'll use the methodology across multiple projects, install the five subagents to `~/.claude/agents/` once. They're then available in every project without per-project copies. Project-scoped agents (in `<project>/.claude/agents/`) override these globals when present.
-
-```bash
-git clone https://github.com/<you>/phased-agents.git
-cd phased-agents
-./bin/phased-agents install
+```
+Set up the phased-agents methodology in this directory. Clone
+https://github.com/ameri110/phased-agents into a temp dir, read its SETUP.md,
+and follow it: work out whether this is a new or existing project, install
+accordingly, run the day-1 interview, and then take over as project-lead.
 ```
 
-Re-run with `--force` to overwrite existing agent files.
+That's it. Claude clones the repo, reads [`SETUP.md`](./SETUP.md), detects which situation you're in, installs the methodology files in place, interviews you (domain, stack, eval semantics, timeline) to customize the generic template, and ends by taking over as your **project-lead**. No code is written before that interview.
 
-### Pick your scenario
+**Returning to a project later?** Paste the same prompt. `SETUP.md` notices the methodology is already set up and customized, so instead of reinstalling it resumes as the project-lead and briefs you on where things stand. (If you prefer, you can still open Claude and paste `RESUME-LEAD.md` directly — same result.)
 
-|  | **Public** — files committed to the project repo | **Personal** — files invisible to the project repo |
+**Updating an existing project to newer methodology files?** Paste the same prompt and say you want to *update*. `SETUP.md` refreshes only the safe surface (agent definitions, doc scaffolding, role docs) and never clobbers your customized `CLAUDE.md` or your `docs/` content without showing you a diff first.
+
+### Which file does what
+
+You rarely touch these directly — `SETUP.md` routes to the right one — but it helps to know the map:
+
+| File | What it is | When it's used |
 |---|---|---|
-| **New project** | [Public + new](#public--new) | [Personal + new](#personal--new) |
-| **Existing project** | [Public + existing](#public--existing) | [Personal + existing](#personal--existing) |
+| `SETUP.md` | The installer brain (instructions to Claude) | Every time, via the paste prompt above |
+| `BOOTSTRAP.md` | The day-1 interview prompt | First-time setup, run by SETUP |
+| `RESUME-LEAD.md` | The "wake up a project-lead" prompt | Every session after day-1 |
+| `PROJECT-LEAD.md` | The project-lead's role *contract* (reference) | Read by the lead — never pasted to start a session |
 
-**Public** is the default — methodology files live in the project repo and your team sees them. Best when teammates use Claude Code, or are happy with `docs/decisions/` (ADRs), `docs/phases/` (phase plans), and `docs/evals/` (PASS/FAIL reports) being committed regardless of who or what authored them.
+### Manual / scriptable path (advanced)
 
-**Personal** keeps everything out of the project repo. Files live in `~/.phased-agents/` (a private git repo you push to a private remote for backup), and the project gets symlinks pointing into the vault. Entries in `.git/info/exclude` hide the symlinks from git, so teammates never see a phased-agents file. Best when you don't want to impose AI tooling on teammates, or when you just want your workflow private.
-
-In all four cases, day-1 setup is the same: open Claude in the project root and paste `BOOTSTRAP.md`. Claude interviews you (domain, stack, eval semantics, timeline) and customizes the template before any code is written.
-
----
-
-### Public + new
+If you'd rather drive it yourself, or wire it into CI, the underlying script is still there:
 
 ```bash
-./bin/phased-agents new ~/Desktop/projects/my-thing
-cd ~/Desktop/projects/my-thing
-claude
-# paste the contents of BOOTSTRAP.md when Claude opens
+git clone https://github.com/ameri110/phased-agents.git
+cd phased-agents
+
+./bin/phased-agents install                          # install the 5 agents globally to ~/.claude/agents/
+./bin/phased-agents new ~/Desktop/projects/my-thing  # scaffold a new project
+cd ~/my-existing-project && /path/to/phased-agents/bin/phased-agents adopt  # retrofit an existing repo
 ```
 
-The first commit lands after Claude finishes the day-1 BOOTSTRAP and customizes the template.
-
-### Public + existing
-
-```bash
-cd ~/Desktop/projects/my-existing-project
-/path/to/phased-agents/bin/phased-agents adopt
-claude
-# paste the contents of BOOTSTRAP.md when Claude opens
-```
-
-`adopt` backs up any existing `CLAUDE.md` to `CLAUDE.md.bak` and only installs files that don't already conflict. Its BOOTSTRAP variant asks Claude to *audit* your repo first and propose a phase plan that picks up where you are, rather than starting from zero.
-
-### Personal + new
-
-```bash
-# One-time vault setup (skip if you've already done this)
-./bin/phased-agents personal init
-cd ~/.phased-agents
-git remote add origin git@github.com:<you>/phased-agents-vault.git
-git push -u origin main
-
-# Per-project
-./bin/phased-agents new ~/Desktop/projects/my-thing
-cd ~/Desktop/projects/my-thing
-/path/to/phased-agents/bin/phased-agents personal link
-claude
-# paste the contents of BOOTSTRAP.md when Claude opens
-```
-
-`personal link` moves the just-scaffolded methodology files into the vault and replaces them with symlinks; it appends a managed block to `.git/info/exclude` so git doesn't see them. The project repo's first commit will only contain whatever non-phased-agents content `phased-agents new` happens to ship — typically nothing project-specific, so commit that or don't.
-
-### Personal + existing
-
-Adopt the methodology in an existing repo without ever committing a phased-agents file to it.
-
-```bash
-# One-time vault setup (skip if you've already done this)
-./bin/phased-agents personal init
-cd ~/.phased-agents
-git remote add origin git@github.com:<you>/phased-agents-vault.git
-git push -u origin main
-
-# Per-project: install methodology files, then immediately move them into the vault
-cd ~/Desktop/projects/my-existing-project
-/path/to/phased-agents/bin/phased-agents adopt
-/path/to/phased-agents/bin/phased-agents personal link
-# (interactive — confirms before migrating any files)
-
-claude
-# paste the contents of BOOTSTRAP.md when Claude opens
-```
-
-Because the files were just installed by `adopt` and not yet committed, `personal link` cleanly moves them into the vault without any project-repo deletions to commit afterward. If you're migrating a project that *already* had phased-agents files committed, `personal link` will also stage `git rm` for those — review with `git status` and commit in the project repo: `git commit -m "chore: switch to phased-agents personal mode"`.
-
-### After day-1 (any mode)
-
-The pipeline runs the same regardless of mode: researcher → implementer → reviewer → eval-runner → commit → doc-keeper. The one difference for **personal mode** is that methodology bookkeeping commits go to the vault, not the project repo:
-
-```bash
-# Periodically, or after each sub-phase:
-phased-agents personal commit -m "phase-Nx: doc-keeper sync"
-cd ~/.phased-agents && git push
-```
-
-See **[PERSONAL-MODE.md](./PERSONAL-MODE.md)** for personal-mode details (multi-machine workflow, recovery, caveats, two-commit boundary).
+Then open Claude in the project and paste `BOOTSTRAP.md` (new/adopt) or `RESUME-LEAD.md` (returning). Re-run `install` with `--force` to overwrite existing agent files.
 
 ## How the pieces fit
 
@@ -169,10 +107,10 @@ Open Claude in your project root, paste `RESUME-LEAD.md`, get a briefing, contin
 
 ## Read more
 
+- **[SETUP.md](./SETUP.md)** — the AI-mode installer Claude follows to set up, resume, or update a project
 - **[METHODOLOGY.md](./METHODOLOGY.md)** — the philosophy, why each rule exists, anti-patterns, customization guide
-- **[PERSONAL-MODE.md](./PERSONAL-MODE.md)** — Mode C: keep phased-agents files out of the project repo entirely
 - **[template/](./template/)** — the actual files copied into your project
-- **[bin/phased-agents](./bin/phased-agents)** — the entry-point script
+- **[bin/phased-agents](./bin/phased-agents)** — the entry-point script (manual path)
 
 ## Contributing
 

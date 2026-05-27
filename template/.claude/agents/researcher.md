@@ -38,8 +38,8 @@ re-reading the sources.
   reading order.
 - Output is markdown only. Do not write code.
 
-Save notes as `docs/research/<short-topic-name>.md` (e.g., `cfr.md`,
-`oauth-pkce.md`, `webrtc-handshake.md`).
+Save notes as `docs/research/<short-topic-name>.md` (e.g.,
+`consistent-hashing.md`, `oauth-pkce.md`, `webrtc-handshake.md`).
 
 ## When asked a question without specific source material
 

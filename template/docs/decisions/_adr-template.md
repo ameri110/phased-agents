@@ -1,6 +1,8 @@
-# NNNN — {{Title}}
+# {{Title}}
 
-**Status:** proposed | accepted | superseded by NNNN | deprecated
+<!-- filename: YYYY-MM-DD-<slug>.md -->
+
+**Status:** proposed | accepted | superseded by <slug> | deprecated
 **Date:** YYYY-MM-DD
 
 ## Context
