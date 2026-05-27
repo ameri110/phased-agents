@@ -27,16 +27,15 @@ Overkill for one-week builds, throwaway prototypes, or marketing sites — use a
 Open Claude Code in your project directory (or an empty one for a new project) and paste:
 
 ```
-Set up the phased-agents methodology in this directory. Clone
+Use the phased-agents methodology in this directory. Clone
 https://github.com/ameri110/phased-agents into a temp dir, read its SETUP.md,
-and follow it: work out whether this is a new or existing project, install
-accordingly, run the day-1 interview, and then take over as project-lead.
+and follow it — it detects whether to install fresh or resume an existing
+setup, then takes over as project-lead.
 ```
 
-Claude reads [`SETUP.md`](./SETUP.md), figures out your situation, installs the files, interviews you to customize the generic template, and takes over as **project-lead**. No code is written before that interview.
+The same prompt works whether you're **setting up** or **coming back later** — [`SETUP.md`](./SETUP.md) detects which from the project's state, customizes the generic template via a day-1 interview the first time, and resumes and briefs you on later runs. Either way it ends by taking over as **project-lead**, and no code is written before the interview.
 
-- **Returning later?** Paste the same prompt — SETUP detects an existing setup and resumes as the lead instead of reinstalling.
-- **Updating to newer files?** Paste it and say "update" — SETUP refreshes only the safe surface (agents, doc scaffolding, role docs) and diffs anything customized before touching it.
+For the third case — **updating** an already-set-up project to newer methodology files — add one clause: *"…and update the methodology files first."* SETUP then refreshes only the safe surface (agents, doc scaffolding, role docs) and diffs anything customized before touching it. (It's a separate verb on purpose, so a normal resume never silently overwrites your files.)
 
 ### Which file does what
 
