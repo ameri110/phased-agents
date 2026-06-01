@@ -177,9 +177,16 @@ cmd_doctor() {
     local main_wt safe=0 blocked=0
     main_wt="$(git rev-parse --show-toplevel)"
 
+    # Capture the worktree list once and reuse it for both passes below.
+    local wt_porcelain
+    wt_porcelain="$(git worktree list --porcelain)"
+
     bold "Worktrees"
     local wt="" br=""
-    # `git worktree list --porcelain` emits blank-line-separated blocks.
+    # `git worktree list --porcelain` emits blank-line-separated blocks; the
+    # trailing newline is stripped by $(...), so re-add a blank line to flush
+    # the final block. A detached worktree emits `detached` instead of a
+    # `branch` line, leaving br empty — the helper handles that.
     while IFS= read -r line || [[ -n "$line" ]]; do
         case "$line" in
             "worktree "*) wt="${line#worktree }" ;;
@@ -189,15 +196,17 @@ cmd_doctor() {
                 wt="" br=""
                 ;;
         esac
-    done < <(git worktree list --porcelain; echo)
+    done < <(printf '%s\n\n' "$wt_porcelain")
 
     echo
     bold "Local branches without a worktree"
     local found_loose=false
     while IFS= read -r b; do
         [[ "$b" == "$main_branch" ]] && continue
-        # skip branches that are checked out in a worktree (already reported above)
-        if git worktree list --porcelain | grep -q "^branch refs/heads/$b$"; then continue; fi
+        # skip branches checked out in a worktree (already reported above).
+        # -Fqx: fixed-string, whole-line — a '.' in a branch name is literal,
+        # not a regex wildcard that could falsely match another worktree.
+        if printf '%s\n' "$wt_porcelain" | grep -Fqx "branch refs/heads/$b"; then continue; fi
         found_loose=true
         local st; st="$(pr_state "$b")"
         case "$st" in
@@ -227,7 +236,16 @@ _doctor_report_wt() {
     fi
     local slug; slug="$(basename "$path")"
     if [[ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]]; then
-        red "  $path  [$branch] — DIRTY → STOP, resolve uncommitted changes first"
+        red "  $path  [${branch:-detached}] — DIRTY → STOP, resolve uncommitted changes first"
+        blocked=$((blocked+1)); return
+    fi
+    if [[ -z "$branch" ]]; then
+        # Detached HEAD (or bare) worktree — no branch to delete. Don't emit a
+        # bogus `git branch -D` with an empty name; suggest only the worktree
+        # removal and let the human confirm it's residue.
+        yellow "  $path  [detached HEAD] — no branch → remove the worktree if it's residue"
+        echo "      docker compose -p $slug down -v   # if this sub-phase ran a stack"
+        echo "      git worktree remove $path"
         blocked=$((blocked+1)); return
     fi
     local st; st="$(pr_state "$branch")"
