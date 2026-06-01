@@ -5,6 +5,7 @@
 #   phased-agents install            install agent definitions to ~/.claude/agents/
 #   phased-agents new <path>         create a new project from the template
 #   phased-agents adopt              add the method to the current project
+#   phased-agents doctor             read-only audit of worktree/branch residue
 #   phased-agents help               show this help
 #
 # Most users never call this script directly — see SETUP.md. A fresh Claude
@@ -41,6 +42,11 @@ Commands:
                         Backs up any existing CLAUDE.md to CLAUDE.md.bak.
                         Adds .claude/agents/ and docs/ skeleton (only files
                         that don't already exist).
+
+  doctor                Read-only residue audit: lists worktrees and branches,
+                        classifies each (dirty / protected / safe to remove)
+                        using PR state, and prints exact teardown commands.
+                        Never deletes anything itself.
 
   help                  Show this help.
 
@@ -138,6 +144,110 @@ cmd_new() {
     echo "  git commit -m 'chore: scaffold from phased-agents template'"
 }
 
+cmd_doctor() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        red "Error: not in a git repository." >&2
+        exit 1
+    fi
+
+    bold "phased-agents doctor — read-only residue audit"
+    echo "Reports only. Never deletes. Run the printed commands yourself."
+    echo
+
+    # `|| true` inside the substitution: no origin remote → symbolic-ref exits
+    # 1, pipefail propagates it, and set -e would kill a plain assignment.
+    local main_branch
+    main_branch="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true)"
+    [[ -z "$main_branch" ]] && main_branch="main"
+
+    local have_gh=false
+    command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && have_gh=true
+    if ! $have_gh; then
+        yellow "Note: gh not available/authed — can't read PR state, so merged-ness is unknown."
+        yellow "      Audit still lists residue; verify each PR is merged before deleting."
+        echo
+    fi
+
+    # PR state is the source of truth for merged-ness (squash defeats git ancestry).
+    pr_state() {
+        $have_gh || { echo "UNKNOWN"; return; }
+        gh pr view "$1" --json state -q .state 2>/dev/null || echo "NONE"
+    }
+
+    local main_wt safe=0 blocked=0
+    main_wt="$(git rev-parse --show-toplevel)"
+
+    bold "Worktrees"
+    local wt="" br=""
+    # `git worktree list --porcelain` emits blank-line-separated blocks.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            "worktree "*) wt="${line#worktree }" ;;
+            "branch "*)   br="${line#branch refs/heads/}" ;;
+            "")
+                _doctor_report_wt "$wt" "$br"
+                wt="" br=""
+                ;;
+        esac
+    done < <(git worktree list --porcelain; echo)
+
+    echo
+    bold "Local branches without a worktree"
+    local found_loose=false
+    while IFS= read -r b; do
+        [[ "$b" == "$main_branch" ]] && continue
+        # skip branches that are checked out in a worktree (already reported above)
+        if git worktree list --porcelain | grep -q "^branch refs/heads/$b$"; then continue; fi
+        found_loose=true
+        local st; st="$(pr_state "$b")"
+        case "$st" in
+            MERGED) green "  $b — PR merged, no worktree → safe to delete";  safe=$((safe+1))
+                    echo "      git branch -D $b" ;;
+            OPEN)   yellow "  $b — PR OPEN → protected, leave it"; blocked=$((blocked+1)) ;;
+            *)      yellow "  $b — PR state $st → verify before deleting"; blocked=$((blocked+1)) ;;
+        esac
+    done < <(git for-each-ref --format='%(refname:short)' refs/heads/)
+    $found_loose || echo "  (none)"
+
+    echo
+    bold "Summary"
+    echo "  safe to remove: $safe    needs attention: $blocked"
+    echo
+    yellow "One-time fix: enable GitHub Settings → 'Automatically delete head branches'"
+    yellow "to stop merged remote branches from leaking — no script needed."
+}
+
+# Helper for cmd_doctor: classify and report a single worktree.
+_doctor_report_wt() {
+    local path="$1" branch="$2"
+    [[ -z "$path" ]] && return
+    if [[ "$path" == "$main_wt" || "$branch" == "$main_branch" ]]; then
+        echo "  $path  [$branch] — main worktree, protected"
+        return
+    fi
+    local slug; slug="$(basename "$path")"
+    if [[ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]]; then
+        red "  $path  [$branch] — DIRTY → STOP, resolve uncommitted changes first"
+        blocked=$((blocked+1)); return
+    fi
+    local st; st="$(pr_state "$branch")"
+    case "$st" in
+        OPEN)
+            yellow "  $path  [$branch] — PR OPEN → protected, leave it"; blocked=$((blocked+1)) ;;
+        MERGED|UNKNOWN|NONE)
+            if [[ "$st" == "MERGED" ]]; then
+                green "  $path  [$branch] — clean, PR merged → safe to tear down"; safe=$((safe+1))
+            else
+                yellow "  $path  [$branch] — clean, PR state $st → verify merged, then tear down"; blocked=$((blocked+1))
+            fi
+            echo "      docker compose -p $slug down -v   # if this sub-phase ran a stack"
+            echo "      git worktree remove $path"
+            echo "      git branch -D $branch" ;;
+        *)
+            yellow "  $path  [$branch] — PR state $st → verify before removing"; blocked=$((blocked+1)) ;;
+    esac
+}
+
 cmd_adopt() {
     require_template
     if [[ ! -d ".git" ]]; then
@@ -222,6 +332,7 @@ case "${1:-help}" in
     install)  shift; cmd_install "$@" ;;
     new)      shift; cmd_new "$@" ;;
     adopt)    shift; cmd_adopt "$@" ;;
+    doctor)   shift; cmd_doctor "$@" ;;
     help|-h|--help) usage ;;
     *)
         red "Unknown command: ${1:-}" >&2

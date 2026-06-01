@@ -19,7 +19,9 @@ project together across many sub-sessions.
   roadmap, what's caveated and what isn't
 - **Is the integrator.** Only the project-lead (or you) commits to
   `main`. Sub-sessions open PRs from their branches; the project-lead
-  reviews the eval/review reports, reconciles the ADR index, and merges.
+  reviews the eval/review reports, reconciles the ADR index, merges, and
+  then **tears the sub-phase down** (see "Teardown" below) so residue
+  never accumulates.
 
 ## What the project-lead does NOT do
 
@@ -31,6 +33,53 @@ project together across many sub-sessions.
 The project-lead's tools are conversation, decision-framing, and
 prompt-drafting. Not execution. (Autonomous mode, below, relaxes the
 "no spawning" part — but never the "no deciding for you" part.)
+
+## Teardown (after merge)
+
+A merged sub-phase leaves residue: a worktree, a local branch, a remote
+branch, and any Docker volumes its stack created. Left alone it piles up
+until you can't tell which branches and worktrees are live. The integrator
+closes the lifecycle with one **fixed** sequence on the *known*
+branch/worktree — no discovery, no cleverness:
+
+```bash
+# merged-ness is decided by PR STATE, never git ancestry (squash defeats
+# ancestry — `git branch -d` will wrongly refuse). Confirm the PR first:
+gh pr view phase-2b-<slug> --json state -q .state   # must print MERGED
+
+# 1. SAFETY GATE — refuse to tear down a dirty worktree:
+git -C ../{{PROJECT_SLUG}}--phase-2b status --porcelain   # must be EMPTY
+#    non-empty → STOP, report to the human, let them decide. Never -v a dirty tree.
+
+# 2. drop the stack's volumes (the biggest disk leak) — only if it ran one:
+docker compose -p {{PROJECT_SLUG}}-phase-2b down -v
+
+# 3. remove the worktree, THEN the local branch (this order matters — a
+#    branch still checked out in a worktree can't be deleted):
+git worktree remove ../{{PROJECT_SLUG}}--phase-2b
+git branch -D phase-2b-<slug>   # -D, not -d: squash-merge defeats -d's ancestry check
+
+# 4. remote branch: handled by repo config, not this script (see below).
+```
+
+**Protected — teardown refuses to touch these:** `main`, and any branch
+with an open PR. There is no config file for this; it's a short rule, not a
+system. If a branch isn't a confirmed-merged sub-phase branch, leave it.
+
+**Respect the permission gate.** `git branch -D` / `docker` may be gated to
+the human by `.claude/settings.json`. When a step is gated, the lead
+**emits the exact command for the human to run** rather than assuming it
+can run it — it does not fight the gate.
+
+**One-time config that deletes a whole leak category for free:** turn on
+GitHub's *Settings → General → "Automatically delete head branches."* That
+removes the merged-remote-branch leak with zero code — step 4 above becomes
+a no-op. Pair it with the predictable `-p {{PROJECT_SLUG}}-phase-Nx` Docker
+project name (set when the worktree comes up — see `CLAUDE.md` "Parallel
+pipelines") so step 2 is always a deterministic one-liner.
+
+`phased-agents doctor` is the read-only audit: it reports what's still
+around and prints these exact commands, but never deletes anything itself.
 
 ## Two modes: supervised and autonomous
 
@@ -162,7 +211,8 @@ A typical week looks like:
    (autonomous). Either way it lands as a PR, not a push to `main`.
 5. The sub-session reports back when done (and opens the PR).
 6. The project-lead reviews the PR's eval/review reports, reconciles the
-   ADR index, and merges to `main`.
+   ADR index, merges to `main`, and runs the fixed teardown sequence (see
+   "Teardown") so the worktree, branch, and Docker volumes don't leak.
 7. The project-lead translates the outcome, surfaces follow-up decisions,
    and drafts the next kickoff prompt.
 
