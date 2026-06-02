@@ -154,7 +154,7 @@ A typical sub-phase session:
 6. **Eval-runner** runs the gate script and writes a PASS/FAIL report.
 7. The session commits the sub-phase as a single commit on its branch and opens a PR.
 8. **Doc-keeper** updates `CLAUDE.md` "Current phase" and the phase doc's status.
-9. The **project-lead** reviews the PR, reconciles the ADR index, and merges to `main`.
+9. The **project-lead** reviews the PR, reconciles the ADR index, merges to `main`, then **tears the sub-phase down** with a fixed sequence — dirty-worktree safety gate, `docker compose -p <slug> down -v`, remove the worktree, delete the local branch (see "Teardown" in `PROJECT-LEAD.md`). Turning on GitHub's "Automatically delete head branches" removes the remote-branch leak for free; `phased-agents doctor` is the read-only audit for whatever slips through.
 
 If any step fails (gate FAIL, reviewer REJECT, etc.), the session does not advance — the failure is real and gets fixed before the PR merges.
 
@@ -171,6 +171,7 @@ Things to actively avoid:
 - **Continuing on a failed gate** — "we'll fix it next sub-phase" never happens. Fix it now or recalibrate the gate transparently with an ADR.
 - **Sub-sessions pushing to `main`** — they open PRs; only the project-lead merges. A direct push from a parallel branch is how the audit trail forks.
 - **One worktree per agent** — the worktree is per sub-phase. Splitting the pipeline across worktrees forces a merge between researcher and implementer for no benefit.
+- **Removing a worktree without `docker compose -p <slug> down -v`** — `git worktree remove` leaves the stack's volumes behind. Orphaned volumes are silent disk leaks. Always down the stack with `-v` *first* — that's what the integrator's teardown sequence does.
 - **The autonomous lead deciding for you** — spawning pipelines is fine; answering an ADR-worthy question itself is not. That collapses the human gate.
 
 ## Recovery: when the methodology has slipped

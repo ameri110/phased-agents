@@ -137,11 +137,12 @@ share one worktree so they can see each other's notes, diffs, and reports.
 ```bash
 # from the project root, for sub-phase 2b:
 git worktree add ../{{PROJECT_SLUG}}--phase-2b phase-2b-<slug>
+# if the sub-phase brings up a stack, name it predictably so teardown is
+# a one-liner later: docker compose -p {{PROJECT_SLUG}}-phase-2b up ...
 # ... run the full pipeline inside that worktree ...
 # commit per discipline above, push the branch, open a PR:
 git push -u origin phase-2b-<slug>
 gh pr create --fill
-git worktree remove ../{{PROJECT_SLUG}}--phase-2b   # after merge
 ```
 
 - Use this only for work that genuinely fans out. A linear phase chain
@@ -150,6 +151,12 @@ git worktree remove ../{{PROJECT_SLUG}}--phase-2b   # after merge
 - Each branch's ADRs use date+slug filenames so they never collide
   (see `docs/decisions/README.md`).
 - The project-lead merges PRs into `main` and reconciles the ADR index.
+- **Teardown is the integrator's job, not the sub-session's.** After the
+  PR merges, the project-lead runs the fixed teardown sequence — down the
+  docker stack with `-v`, remove the worktree, delete the local branch
+  (see "Teardown" in `PROJECT-LEAD.md`). Removing a worktree *without*
+  `docker compose -p <slug> down -v` is exactly how orphaned volumes pile
+  up. `phased-agents doctor` reports anything left behind.
 
 ## Critical reminders for any agent
 
