@@ -29,13 +29,13 @@ Open Claude Code in your project directory (or an empty one for a new project) a
 ```
 Use the phased-agents methodology in this directory. Clone
 https://github.com/ameri110/phased-agents into a temp dir, read its SETUP.md,
-and follow it — it detects whether to install fresh or resume an existing
-setup, then takes over as project-lead.
+and follow it — it detects whether to install fresh, resume, or update an
+existing setup, then takes over as project-lead.
 ```
 
-The same prompt works whether you're **setting up** or **coming back later** — [`SETUP.md`](./SETUP.md) detects which from the project's state, customizes the generic template via a day-1 interview the first time, and resumes and briefs you on later runs. Either way it ends by taking over as **project-lead**, and no code is written before the interview.
+**One prompt covers all three cases.** [`SETUP.md`](./SETUP.md) detects from the project's state which applies: a first-time **install** customizes the generic template via a day-1 interview; a **resume** reads durable state and briefs you. No code is written before the interview.
 
-For the third case — **updating** an already-set-up project to newer methodology files — add one clause: *"…and update the methodology files first."* SETUP then refreshes only the safe surface (agents, doc scaffolding, role docs) and diffs anything customized before touching it. (It's a separate verb on purpose, so a normal resume never silently overwrites your files.)
+**Updates are automatic on resume.** Because the prompt clones the latest phased-agents every time, a resume compares your installed **role docs** against it and, if they changed, offers to apply the update. Accept and it refreshes the pure-methodology files (the role contracts) directly, **diffs and asks** before touching anything you may have customized (agents, scaffold templates, `CLAUDE.md`), and **never** touches your project content — your phase index and ADR index are safe. So every repo that uses this method gets the latest by pasting the same prompt; you just confirm the offer, and nothing is overwritten silently. (Saying *"update the methodology files"* still forces the refresh if you ever want to trigger it explicitly.)
 
 ### Which file does what
 

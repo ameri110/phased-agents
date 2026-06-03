@@ -36,8 +36,10 @@ Inspect PROJECT (do not modify anything yet):
    real source code already.
    → go to **Install (existing)**, then **Bootstrap**.
 
-If the user explicitly said "update" rather than install/use, go to
-**Update** instead.
+In the **Resume** case you also check for methodology updates automatically
+(see Resume below) and offer them — the user does not need to ask. If the
+user *explicitly* said "update", skip straight to **Update** and apply the
+full refresh.
 
 When you're unsure between empty and existing, ask the user one plain
 question ("Is this a brand-new project, or does it already have code I'm
@@ -80,27 +82,62 @@ user the floor as project-lead. Don't write production code during this.
 ## Resume
 
 The methodology is already set up. You are a *returning* project-lead, not
-an installer. Read `PROJECT/RESUME-LEAD.md` and follow it: read durable
-state (`CLAUDE.md`, `PROJECT-LEAD.md`, phase docs, git log, recent
-eval/review reports), give the under-200-word briefing, flag anomalies,
-and hand the user the floor. Do not start forward work without their input.
+an installer.
+
+**First, check for methodology updates** (you already cloned REPO, so the
+latest files are in hand). Diff the **role docs** between PROJECT and
+`$REPO/template`:
+
+- `PROJECT-LEAD.md`, `RESUME-LEAD.md`
+
+These two are pure role contracts — never project-specific — so they are the
+only reliable staleness signal: a difference means the methodology changed
+since this project was set up. **Do NOT diff `CLAUDE.md`, the agents, or any
+`docs/**` file for this purpose** — `CLAUDE.md` and the agents are
+customized, and `docs/*/README.md` holds the project's *own* phase index and
+ADR index. All of those always differ, so using them would either spam a
+false "update available" on every resume or risk proposing to overwrite real
+project content. Decide:
+
+- **All match** → say nothing about updates; just resume.
+- **Some differ** → fold a one-line "📦 methodology updates available (N
+  files)" into your briefing and **offer** to apply them via **Update**
+  (below). Don't apply without the user's go-ahead — show the diffs and let
+  them confirm. The offer is safe to make because Update diff-asks before
+  touching anything customized.
+
+Then read durable state (`CLAUDE.md`, `PROJECT-LEAD.md`, phase docs, git log,
+recent eval/review reports), give the under-200-word briefing (with the
+updates line if any), flag anomalies, and hand the user the floor. Do not
+start forward work without their input.
 
 ## Update
 
-The user wants newer methodology files pulled into an already-set-up
-project. Only refresh the **safe surface** — never blow away their
-customizations:
+Reached two ways: the user explicitly said "update", **or** a Resume
+detected stale role docs and the user accepted the offer. Either way, only
+refresh the **safe surface** — never blow away their customizations or
+project content. Sort every candidate into one of three tiers:
 
-**Safe to overwrite** from `$REPO/template/`:
-- `.claude/agents/*.md` — but if an agent file was domain-customized (its
-  "Bugs to hunt for" / report template differs from the template),
-  show a diff and ask before overwriting.
-- `docs/*/README.md` and `docs/*/_*-template.md` — the doc scaffolding.
-- `PROJECT-LEAD.md`, `RESUME-LEAD.md` — role docs.
+**1. Overwrite directly** from `$REPO/template/` — pure methodology, not
+meant to be hand-edited:
+- `PROJECT-LEAD.md`, `RESUME-LEAD.md` — role contracts. (If the project's
+  copy has local edits beyond the template's own changes, drop to tier 2.)
 
-**Never overwrite blindly:**
-- `CLAUDE.md` — it's customized. Show the user a diff of any *structural*
-  template changes (new sections, changed rules) and let them merge.
+**2. Diff and ask** — may carry local customization; show the diff and let
+the user decide per file:
+- `.claude/agents/*.md` — agents are routinely domain-customized (the
+  reviewer's "Bugs to hunt for", the eval-runner's report template).
+- `docs/*/_*-template.md` — the per-phase / per-ADR scaffold templates; a
+  project may have tweaked them.
+
+**3. NEVER overwrite — project content, not methodology:**
+- `CLAUDE.md` — customized. Show a diff of any *structural* template changes
+  (new sections, changed rules) and let the user merge by hand.
+- `docs/*/README.md` — these are the project's **phase index** and **ADR
+  index** (`docs/phases/README.md`, `docs/decisions/README.md`) and the like.
+  They start as template scaffolds but become living project state. Blindly
+  copying the template over them destroys the index. Leave them; at most,
+  mention a relevant scaffold change for the user to fold in manually.
 - Anything under `docs/phases|decisions|research|evals|reviews/` that holds
   real project content.
 
